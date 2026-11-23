@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../service/auth.service';
 import { StudentService, ImportResult } from '../../service/student.service';
+import { AbanderadoService, AbanderadoImportResult } from '../../service/abanderado.service';
+import { Abanderado } from '../../model/abanderado';
 import { GroupService } from '../../service/group.service';
 import { SettingsService } from '../../service/settings.service';
 import { Student } from '../../model/student';
@@ -43,6 +45,9 @@ export class AdminComponent implements OnInit {
   groups = signal<AdminGroup[]>([]);
   loading = signal(true);
   studentQuery = signal('');
+  // Paginación de la tabla de alumnos
+  readonly pageSize = 10;
+  currentPage = signal(1);
   editingStudent = signal<AdminStudent | null>(null);
   isNewStudent = signal(false);
   notice = signal('');
@@ -53,9 +58,15 @@ export class AdminComponent implements OnInit {
   importResult = signal<ImportResult | null>(null);
   importing = signal(false);
 
+  // Lista de abanderados
+  abanderados = signal<Abanderado[]>([]);
+  abanderadoImportResult = signal<AbanderadoImportResult | null>(null);
+  abanderadoImporting = signal(false);
+
   constructor(
     private authService: AuthService,
     private studentService: StudentService,
+    private abanderadoService: AbanderadoService,
     private groupService: GroupService,
     private settingsService: SettingsService,
     private router: Router
@@ -89,6 +100,11 @@ export class AdminComponent implements OnInit {
       }
     });
 
+    this.abanderadoService.getAbanderados().subscribe({
+      next: (data) => this.abanderados.set(data),
+      error: () => this.showNotice('Error al cargar abanderados')
+    });
+
     this.groupService.getGroups().subscribe({
       next: (data) => {
         const mapped = data.map(g => ({
@@ -113,6 +129,12 @@ export class AdminComponent implements OnInit {
 
   setSection(section: AdminSection): void {
     this.section.set(section);
+  }
+
+  // Al cambiar la búsqueda volvemos a la primera página
+  onStudentSearch(value: string): void {
+    this.studentQuery.set(value);
+    this.currentPage.set(1);
   }
 
   showNotice(message: string): void {
@@ -240,6 +262,69 @@ export class AdminComponent implements OnInit {
     this.importResult.set(null);
   }
 
+  importAbanderados(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      this.showNotice('Solo se permiten archivos .xlsx');
+      input.value = '';
+      return;
+    }
+
+    this.abanderadoImporting.set(true);
+    this.abanderadoImportResult.set(null);
+
+    this.abanderadoService.importAbanderados(file).subscribe({
+      next: (result) => {
+        this.abanderadoImportResult.set({
+          success: result.success || 0,
+          errors: result.errors || [],
+        });
+        this.abanderadoImporting.set(false);
+        this.loadData();
+      },
+      error: () => {
+        this.abanderadoImportResult.set({
+          success: 0,
+          errors: ['No se pudo procesar el archivo. Revisá que sea un .xlsx válido.'],
+        });
+        this.abanderadoImporting.set(false);
+      },
+    });
+
+    // Permite reimportar el mismo archivo más adelante
+    input.value = '';
+  }
+
+  deleteAbanderado(id: string): void {
+    const abanderado = this.abanderados().find(a => a.id === id);
+    if (!confirm(`¿Quitar a ${abanderado?.name || 'este abanderado'} de la lista?`)) return;
+
+    this.abanderadoService.deleteAbanderado(id).subscribe({
+      next: () => {
+        this.abanderados.update(list => list.filter(a => a.id !== id));
+        this.showNotice('Abanderado quitado de la lista.');
+      },
+      error: () => this.showNotice('Error al quitar abanderado')
+    });
+  }
+
+  // Cuántos errores mostrar antes de resumir el resto
+  get visibleAbanderadoImportErrors(): string[] {
+    return (this.abanderadoImportResult()?.errors || []).slice(0, 8);
+  }
+
+  get hiddenAbanderadoImportErrors(): number {
+    const total = this.abanderadoImportResult()?.errors.length || 0;
+    return Math.max(total - this.visibleAbanderadoImportErrors.length, 0);
+  }
+
+  dismissAbanderadoImportResult(): void {
+    this.abanderadoImportResult.set(null);
+  }
+
   // Grupos
   removeMember(groupId: string, member: string): void {
     if (!confirm(`¿Quitar a ${member} del grupo?`)) return;
@@ -314,6 +399,35 @@ export class AdminComponent implements OnInit {
     return this.students().filter(s =>
       `${s.name} ${s.dni}`.toLowerCase().includes(q)
     );
+  }
+
+  get totalStudentPages(): number {
+    return Math.max(Math.ceil(this.filteredStudents.length / this.pageSize), 1);
+  }
+
+  // La página se limita al rango vigente: si se borran alumnos y la lista
+  // se achica, no quedamos mostrando una página que ya no existe.
+  get studentPage(): number {
+    return Math.min(Math.max(this.currentPage(), 1), this.totalStudentPages);
+  }
+
+  get paginatedStudents(): AdminStudent[] {
+    const start = (this.studentPage - 1) * this.pageSize;
+    return this.filteredStudents.slice(start, start + this.pageSize);
+  }
+
+  get studentRangeStart(): number {
+    return this.filteredStudents.length === 0 ? 0 : (this.studentPage - 1) * this.pageSize + 1;
+  }
+
+  get studentRangeEnd(): number {
+    return Math.min(this.studentPage * this.pageSize, this.filteredStudents.length);
+  }
+
+  changeStudentPage(direction: number): void {
+    const next = this.studentPage + direction;
+    if (next < 1 || next > this.totalStudentPages) return;
+    this.currentPage.set(next);
   }
 
   updateStudentField(field: keyof AdminStudent, value: any): void {

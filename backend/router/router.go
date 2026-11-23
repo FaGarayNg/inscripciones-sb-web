@@ -16,6 +16,7 @@ func NewRouter() *mux.Router {
 
 	// Inicializar handlers
 	studentHandler := handlers.NewStudentHandler()
+	abanderadoHandler := handlers.NewAbanderadoHandler()
 	groupHandler := handlers.NewGroupHandler()
 	invitationHandler := handlers.NewInvitationHandler()
 	settingHandler := handlers.NewSettingHandler()
@@ -28,6 +29,9 @@ func NewRouter() *mux.Router {
 	r.HandleFunc("/api/students", studentHandler.GetAllStudents).Methods("GET")
 	r.HandleFunc("/api/students/{id}", studentHandler.GetStudent).Methods("GET")
 	r.HandleFunc("/api/students/{id}/confirm", studentHandler.ConfirmStudent).Methods("POST")
+
+	// Rutas de Abanderados: SOLO lectura es pública (la consulta la comunidad).
+	r.HandleFunc("/api/abanderados", abanderadoHandler.GetAllAbanderados).Methods("GET")
 
 	// Rutas de Groups: SOLO lectura es pública
 	r.HandleFunc("/api/groups", groupHandler.GetAllGroups).Methods("GET")
@@ -51,6 +55,9 @@ func NewRouter() *mux.Router {
 	admin.HandleFunc("/students/{id}", studentHandler.UpdateStudent).Methods("PUT")
 	admin.HandleFunc("/students/{id}", studentHandler.DeleteStudent).Methods("DELETE")
 	admin.HandleFunc("/students/import", studentHandler.ImportStudents).Methods("POST")
+
+	admin.HandleFunc("/abanderados/import", abanderadoHandler.ImportAbanderados).Methods("POST")
+	admin.HandleFunc("/abanderados/{id}", abanderadoHandler.DeleteAbanderado).Methods("DELETE")
 
 	admin.HandleFunc("/groups", groupHandler.GetAllGroups).Methods("GET")
 	admin.HandleFunc("/groups", groupHandler.CreateGroup).Methods("POST")
