@@ -68,6 +68,7 @@ go run main.go
 | GET | `/api/groups` | Listar grupos |
 | GET | `/api/groups/{id}` | Obtener grupo |
 | GET | `/api/invitations` | Listar invitaciones |
+| GET | `/api/abanderados` | Listar abanderados y escoltas titulares |
 
 ### Protegidas (requieren `Authorization: Bearer <token>`)
 
@@ -78,6 +79,8 @@ go run main.go
 | PUT | `/api/admin/students/{id}` | Actualizar estudiante |
 | DELETE | `/api/admin/students/{id}` | Eliminar estudiante |
 | POST | `/api/admin/students/import` | Importar alumnos desde Excel |
+| POST | `/api/admin/abanderados/import` | Importar la lista de abanderados desde Excel |
+| DELETE | `/api/admin/abanderados/{id}` | Quitar un abanderado de la lista |
 | POST | `/api/admin/groups` | Crear grupo |
 | PUT | `/api/admin/groups/{id}` | Actualizar grupo |
 | DELETE | `/api/admin/groups/{id}` | Eliminar grupo |
@@ -85,6 +88,21 @@ go run main.go
 
 > Toda escritura requiere token de administrador. Solo la lectura de listados y la
 > confirmación de banco son públicas, porque las consulta la comunidad sin cuenta.
+
+### Plantillas de Excel
+
+Las plantillas se descargan desde el panel Admin (sección Alumnos) y se sirven
+como archivos estáticos desde `frontend/public/`:
+
+- `plantilla-alumnos.xlsx`: columnas DNI, Nombre Completo, Instancia, Titulo y
+  Escuela. Las columnas C, D y E tienen listas desplegables. Se regenera con
+  `cd backend && go run ./cmd/gen-template`.
+- `plantilla-abanderados.xlsx`: columnas Nombre y apellido, DNI y Curso (las tres
+  obligatorias; Curso es texto libre, p. ej. `1° A`). Se genera con
+  `cd backend && go run ./cmd/gen-abanderados-template`.
+
+En ambas, la fila 1 es el encabezado y se ignora; los datos empiezan en la fila 2.
+Los DNI repetidos se omiten y se informan en el resultado de la importación.
 
 ## Variables de entorno
 

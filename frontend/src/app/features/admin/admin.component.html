@@ -172,7 +172,7 @@
         <div class="admin-toolbar">
           <div class="admin-search">
             <app-icon name="search" [size]="19"></app-icon>
-            <input [value]="studentQuery()" (input)="studentQuery.set($any($event.target).value)" placeholder="Buscar por nombre o DNI" />
+            <input [value]="studentQuery()" (input)="onStudentSearch($any($event.target).value)" placeholder="Buscar por nombre o DNI" />
           </div>
           <div>
             <input #fileInput class="file-input" type="file" accept=".xlsx" (change)="importStudents($event)" />
@@ -234,7 +234,7 @@
               </tr>
             </thead>
             <tbody>
-              @for (student of filteredStudents; track student.id) {
+              @for (student of paginatedStudents; track student.id) {
                 <tr>
                   <td>
                     <span class="student-avatar">{{ student.name.charAt(0) }}</span>
@@ -265,7 +265,102 @@
             </tbody>
           </table>
         </div>
-        <div class="table-summary">Mostrando {{ filteredStudents.length }} de {{ students().length }} alumnos</div>
+        <div class="pagination">
+          <span>Página {{ studentPage }} de {{ totalStudentPages }}</span>
+          <button type="button" (click)="changeStudentPage(-1)" [disabled]="studentPage === 1" aria-label="Página anterior">&lt;</button>
+          <button type="button" (click)="changeStudentPage(1)" [disabled]="studentPage >= totalStudentPages" aria-label="Página siguiente">&gt;</button>
+        </div>
+        <div class="table-summary table-summary--paged">
+          Mostrando {{ studentRangeStart }}–{{ studentRangeEnd }} de {{ filteredStudents.length }} alumnos
+        </div>
+      </div>
+
+      <!-- LISTA DE ABANDERADOS -->
+      <div class="admin-panel abanderados-panel">
+        <div class="abanderados-header">
+          <div>
+            <h2>Lista de abanderados</h2>
+            <p>Abanderados y escoltas titulares del ciclo lectivo 2027.</p>
+          </div>
+          <div class="abanderados-actions">
+            <input #abanderadoFileInput class="file-input" type="file" accept=".xlsx" (change)="importAbanderados($event)" />
+            <a class="template-link" href="/plantilla-abanderados.xlsx" download="plantilla-abanderados.xlsx">
+              <app-icon name="download" [size]="16"></app-icon> Plantilla de abanderados
+            </a>
+            <button class="button button--secondary" [disabled]="abanderadoImporting()" (click)="abanderadoFileInput.click()">
+              <app-icon name="upload" [size]="18"></app-icon>
+              {{ abanderadoImporting() ? 'Importando...' : 'Importar lista' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Resultado de la importación -->
+        @if (abanderadoImportResult(); as result) {
+          <div class="import-result" [class.import-result--error]="result.errors.length > 0">
+            <span class="import-result__icon">
+              <app-icon [name]="result.errors.length > 0 ? 'alert' : 'check'" [size]="18"></app-icon>
+            </span>
+            <div class="import-result__body">
+              <strong>
+                {{ result.success }}
+                {{ result.success === 1 ? 'abanderado importado' : 'abanderados importados' }}
+                @if (result.errors.length > 0) {
+                  · {{ result.errors.length }}
+                  {{ result.errors.length === 1 ? 'fila omitida' : 'filas omitidas' }}
+                }
+              </strong>
+              @if (result.errors.length > 0) {
+                <p>Revisá el archivo: las filas siguientes no se importaron.</p>
+                <ul>
+                  <li *ngFor="let error of visibleAbanderadoImportErrors">{{ error }}</li>
+                </ul>
+                @if (hiddenAbanderadoImportErrors > 0) {
+                  <small>y {{ hiddenAbanderadoImportErrors }} {{ hiddenAbanderadoImportErrors === 1 ? 'error más' : 'errores más' }}.</small>
+                }
+              }
+            </div>
+            <button class="icon-button" type="button" (click)="dismissAbanderadoImportResult()" aria-label="Cerrar resultado">
+              <app-icon name="close" [size]="18" />
+            </button>
+          </div>
+        }
+
+        @if (abanderados().length === 0) {
+          <p class="abanderados-empty">Todavía no se cargó ningún abanderado.</p>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table abanderados-table">
+              <thead>
+                <tr>
+                  <th>Nombre y apellido</th>
+                  <th>DNI</th>
+                  <th>Curso</th>
+                  <th aria-label="Acciones"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (abanderado of abanderados(); track abanderado.id) {
+                  <tr>
+                    <td>
+                      <span class="student-avatar">{{ abanderado.name.charAt(0) }}</span>
+                      <div><strong>{{ abanderado.name }}</strong></div>
+                    </td>
+                    <td>{{ abanderado.dni }}</td>
+                    <td>{{ abanderado.curso }}</td>
+                    <td>
+                      <button class="delete" (click)="deleteAbanderado(abanderado.id)" [attr.aria-label]="'Quitar a ' + abanderado.name">
+                        <app-icon name="trash" [size]="17"></app-icon>
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="table-summary">
+            {{ abanderados().length }} {{ abanderados().length === 1 ? 'abanderado cargado' : 'abanderados cargados' }}
+          </div>
+        }
       </div>
     }
 

@@ -548,6 +548,17 @@ footer { min-height: 160px; padding: 45px max(5vw,24px); display: flex; align-it
 .admin-table td:last-child button, .admin-group-card__header > button, .admin-member-list button { width: 32px; height: 32px; margin-left: 4px; display: inline-grid; place-items: center; border: 0; border-radius: 8px; background: #f5f1f3; color: var(--ink-muted); cursor: pointer; }
 .admin-table td:last-child button.delete:hover, .admin-group-card__header > button:hover { background: var(--pink-soft); color: var(--danger); }
 .table-summary { padding: 14px 18px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: 10px; }
+.table-summary--paged { border-top: 0; padding-top: 0; }
+
+/* Lista de abanderados */
+.abanderados-panel { overflow: visible; }
+.abanderados-header { padding: 18px; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-bottom: 1px solid var(--line); }
+.abanderados-header h2 { margin: 0; font-size: 15px; }
+.abanderados-header p { margin: 4px 0 0; color: var(--ink-muted); font-size: 11px; }
+.abanderados-actions { display: flex; align-items: center; gap: 8px; }
+.abanderados-table { min-width: 520px; }
+.abanderados-empty { margin: 0; padding: 22px 18px; color: var(--ink-muted); font-size: 11px; text-align: center; }
+
 .groups-toolbar { margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
 .groups-toolbar p { margin: 0; color: var(--ink-muted); font-size: 12px; }
 .groups-toolbar p strong { color: var(--ink); }
@@ -606,6 +617,8 @@ footer { min-height: 160px; padding: 45px max(5vw,24px); display: flex; align-it
   .admin-toolbar > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }
   .admin-toolbar .button { padding: 0 10px; font-size: 11px; }
   .template-link { align-self: center; justify-content: center; }
+  .abanderados-header { align-items: stretch; flex-direction: column; }
+  .abanderados-actions { flex-wrap: wrap; justify-content: center; }
   .groups-toolbar { align-items: stretch; flex-direction: column; gap: 14px; }
   .admin-group-grid { grid-template-columns: 1fr; }
   .student-form { grid-template-columns: 1fr; }
