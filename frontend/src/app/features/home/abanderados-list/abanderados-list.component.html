@@ -3,9 +3,7 @@
     <span class="eyebrow">Cuerpo bandera</span>
     <h1>Aspirantes al cuerpo bandera 2027</h1>
     <div class="intro-copy">
-      <p>
-        Listado de abanderados y escoltas titulares del ciclo lectivo 2027.
-      </p>
+      <p>Listado aspirantes al cuerpo bandera del ciclo lectivo 2027.</p>
     </div>
   </div>
 
@@ -14,7 +12,10 @@
       <div class="empty-state">
         <span><app-icon name="info" [size]="26" /></span>
         <h2>Todavía no hay abanderados cargados</h2>
-        <p>Aún no se publicó el listado de aspirantes al cuerpo bandera. Volvé a consultar en otro momento.</p>
+        <p>
+          Aún no se publicó el listado de aspirantes al cuerpo bandera. Volvé a consultar en otro
+          momento.
+        </p>
       </div>
     } @else {
       <div class="filter-row">
@@ -37,8 +38,22 @@
 
       <div class="pagination">
         <span>Página {{ page }} de {{ totalPages }}</span>
-        <button type="button" (click)="changePage(-1)" [disabled]="page === 1" aria-label="Página anterior">&lt;</button>
-        <button type="button" (click)="changePage(1)" [disabled]="page >= totalPages" aria-label="Página siguiente">&gt;</button>
+        <button
+          type="button"
+          (click)="changePage(-1)"
+          [disabled]="page === 1"
+          aria-label="Página anterior"
+        >
+          &lt;
+        </button>
+        <button
+          type="button"
+          (click)="changePage(1)"
+          [disabled]="page >= totalPages"
+          aria-label="Página siguiente"
+        >
+          &gt;
+        </button>
       </div>
     }
   </div>
