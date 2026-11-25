@@ -1,4 +1,5 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -29,6 +30,7 @@ interface AdminGroup {
   id: string;
   name: string;
   mode: 'Grupal' | 'En solitario';
+  leader: string;
   members: string[];
 }
 
@@ -57,11 +59,14 @@ export class AdminComponent implements OnInit {
   // Importación desde Excel
   importResult = signal<ImportResult | null>(null);
   importing = signal(false);
+  exporting = signal(false);
 
   // Lista de abanderados
   abanderados = signal<Abanderado[]>([]);
   abanderadoImportResult = signal<AbanderadoImportResult | null>(null);
   abanderadoImporting = signal(false);
+
+  private readonly destroyRef = inject(DestroyRef);
 
   constructor(
     private authService: AuthService,
@@ -79,52 +84,65 @@ export class AdminComponent implements OnInit {
   loadData(): void {
     this.loading.set(true);
 
-    this.studentService.getStudents().subscribe({
-      next: (data) => {
-        const mapped = data.map(s => ({
-          id: s.id || '',
-          dni: s.dni,
-          name: s.name,
-          email: s.email,
-          instance: s.instance,
-          title: s.title,
-          school: s.school === 'deportiva' ? ('Deportiva' as const) : ('Secundaria' as const),
-          confirmed: s.confirmed
-        }));
-        this.students.set(mapped);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.loading.set(false);
-        this.showNotice('Error al cargar alumnos');
-      }
-    });
+    this.studentService
+      .getAdminStudents()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (data) => {
+          const mapped = data.map(s => ({
+            id: s.id || '',
+            dni: s.dni,
+            name: s.name,
+            email: s.email,
+            instance: s.instance,
+            title: s.title,
+            school: s.school === 'deportiva' ? ('Deportiva' as const) : ('Secundaria' as const),
+            confirmed: s.confirmed
+          }));
+          this.students.set(mapped);
+          this.loading.set(false);
+        },
+        error: () => {
+          this.loading.set(false);
+          this.showNotice('Error al cargar alumnos');
+        }
+      });
 
-    this.abanderadoService.getAbanderados().subscribe({
-      next: (data) => this.abanderados.set(data),
-      error: () => this.showNotice('Error al cargar abanderados')
-    });
+    this.abanderadoService
+      .getAbanderados()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (data) => this.abanderados.set(data),
+        error: () => this.showNotice('Error al cargar abanderados')
+      });
 
-    this.groupService.getGroups().subscribe({
-      next: (data) => {
-        const mapped = data.map(g => ({
-          id: g.id || '',
-          name: `Grupo de ${g.leader?.name || 'Sin nombre'}`,
-          mode: (g.members?.length || 0) > 0 ? 'Grupal' as const : 'En solitario' as const,
-          members: (g.members || []).map(m => m.name)
-        }));
-        this.groups.set(mapped);
-      },
-      error: () => {
-        this.showNotice('Error al cargar grupos');
-      }
-    });
+    this.groupService
+      .getAdminGroups()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (data) => {
+          const mapped = data.map(g => ({
+            id: g.id || '',
+            name: `Grupo de ${g.leader?.name || 'Sin nombre'}`,
+            mode: g.solo ? 'En solitario' as const : 'Grupal' as const,
+            leader: g.leader?.name || '',
+            members: (g.members || []).map(m => m.name)
+          }));
+          this.groups.set(mapped);
+        },
+        error: () => {
+          this.showNotice('Error al cargar grupos');
+        }
+      });
 
     // Disponibilidad de grupos: la controla el secretario desde este panel
-    this.settingsService.getSettings().subscribe({
-      next: (settings) => this.groupsEnabled.set(settings.groupsEnabled === true),
-      error: () => this.groupsEnabled.set(false)
-    });
+    this.settingsService
+      .getSettings()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (settings) => this.groupsEnabled.set(settings.groupsEnabled === true),
+        error: () => this.groupsEnabled.set(false)
+      });
   }
 
   setSection(section: AdminSection): void {
@@ -149,7 +167,7 @@ export class AdminComponent implements OnInit {
       dni: '',
       name: '',
       email: '',
-      instance: 'Primera instancia',
+      instance: 'Primera',
       title: '',
       school: 'Secundaria',
       confirmed: false
@@ -262,6 +280,29 @@ export class AdminComponent implements OnInit {
     this.importResult.set(null);
   }
 
+  exportStudents(): void {
+    if (this.exporting()) return;
+    this.exporting.set(true);
+    this.studentService.exportStudents().subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'listado-alumnos.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        this.exporting.set(false);
+        this.showNotice('Listado exportado correctamente.');
+      },
+      error: () => {
+        this.exporting.set(false);
+        this.showNotice('No se pudo exportar el listado.');
+      },
+    });
+  }
+
   importAbanderados(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -329,7 +370,7 @@ export class AdminComponent implements OnInit {
   removeMember(groupId: string, member: string): void {
     if (!confirm(`¿Quitar a ${member} del grupo?`)) return;
 
-    this.groupService.getGroups().subscribe({
+    this.groupService.getAdminGroups().subscribe({
       next: (groups) => {
         const group = groups.find(g => g.id === groupId);
         const memberObj = group?.members?.find(m => m.name === member);
@@ -386,7 +427,7 @@ export class AdminComponent implements OnInit {
   }
 
   get groupedStudentCount(): number {
-    return new Set(this.groups().flatMap(g => g.members)).size;
+    return new Set(this.groups().flatMap(g => [g.leader, ...g.members])).size;
   }
 
   get maxStudents(): number {

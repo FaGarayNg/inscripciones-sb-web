@@ -18,13 +18,15 @@ import (
 
 // StudentHandler handles HTTP requests for students
 type StudentHandler struct {
-	repo *repository.StudentRepository
+	repo      *repository.StudentRepository
+	groupRepo *repository.GroupRepository
 }
 
 // NewStudentHandler creates a new student handler
 func NewStudentHandler() *StudentHandler {
 	return &StudentHandler{
-		repo: repository.NewStudentRepository(),
+		repo:      repository.NewStudentRepository(),
+		groupRepo: repository.NewGroupRepository(),
 	}
 }
 
@@ -38,6 +40,25 @@ func normalizeSchool(value string) string {
 		return "deportiva"
 	default:
 		return ""
+	}
+}
+
+// normalizeInstance unifica las formas largas y cortas de las instancias.
+// Las plantillas usan "Primera", "Segunda", etc.; el panel históricamente
+// escribía "Primera instancia". Guardamos siempre la forma corta para que los
+// filtros del listado público no terminen con valores duplicados.
+func normalizeInstance(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "primera", "primera instancia", "1":
+		return "Primera"
+	case "segunda", "segunda instancia", "2":
+		return "Segunda"
+	case "tercera", "tercera instancia", "3":
+		return "Tercera"
+	case "cuarta", "cuarta instancia", "4":
+		return "Cuarta"
+	default:
+		return strings.TrimSpace(value)
 	}
 }
 
@@ -61,8 +82,22 @@ func containsSheet(sheets []string, name string) bool {
 	return false
 }
 
-// GetAllStudents handles GET /api/students</path>
+// GetAllStudents handles GET /api/students (público).
+// Expone solo los campos necesarios para la consulta ciudadana: nunca el email.
 func (h *StudentHandler) GetAllStudents(w http.ResponseWriter, r *http.Request) {
+	students, err := h.repo.FindAll()
+	if err != nil {
+		http.Error(w, "Error al obtener estudiantes", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(models.ToPublicStudents(students))
+}
+
+// GetAllStudentsAdmin handles GET /api/admin/students (protegido).
+// Devuelve la ficha completa, incluido el email, para el panel administrativo.
+func (h *StudentHandler) GetAllStudentsAdmin(w http.ResponseWriter, r *http.Request) {
 	students, err := h.repo.FindAll()
 	if err != nil {
 		http.Error(w, "Error al obtener estudiantes", http.StatusInternalServerError)
@@ -73,7 +108,7 @@ func (h *StudentHandler) GetAllStudents(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(students)
 }
 
-// GetStudent handles GET /api/students/{id}
+// GetStudent handles GET /api/students/{id} (público).
 func (h *StudentHandler) GetStudent(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := primitive.ObjectIDFromHex(vars["id"])
@@ -93,7 +128,7 @@ func (h *StudentHandler) GetStudent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(student)
+	json.NewEncoder(w).Encode(models.ToPublicStudent(*student))
 }
 
 // CreateStudent handles POST /api/students
@@ -110,6 +145,7 @@ func (h *StudentHandler) CreateStudent(w http.ResponseWriter, r *http.Request) {
 	} else {
 		student.School = "secundaria"
 	}
+	student.Instance = normalizeInstance(student.Instance)
 
 	if err := h.repo.Create(&student); err != nil {
 		http.Error(w, "Error al crear estudiante", http.StatusInternalServerError)
@@ -142,6 +178,7 @@ func (h *StudentHandler) UpdateStudent(w http.ResponseWriter, r *http.Request) {
 	} else {
 		student.School = "secundaria"
 	}
+	student.Instance = normalizeInstance(student.Instance)
 
 	if err := h.repo.Update(id, &student); err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -172,6 +209,7 @@ func (h *StudentHandler) ConfirmStudent(w http.ResponseWriter, r *http.Request) 
 
 	var payload struct {
 		Email string `json:"email"`
+		DNI   string `json:"dni"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Error en los datos enviados", http.StatusBadRequest)
@@ -186,6 +224,32 @@ func (h *StudentHandler) ConfirmStudent(w http.ResponseWriter, r *http.Request) 
 
 	if _, err := mail.ParseAddress(email); err != nil {
 		http.Error(w, "Correo electrónico inválido", http.StatusBadRequest)
+		return
+	}
+
+	// El listado público expone el ID; pedir también el DNI evita que cualquiera
+	// confirme un banco ajeno con solo conocer ese ID.
+	dni := strings.TrimSpace(payload.DNI)
+	if dni == "" {
+		http.Error(w, "El DNI es obligatorio", http.StatusBadRequest)
+		return
+	}
+
+	existing, err := h.repo.FindByID(id)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			http.Error(w, "Estudiante no encontrado", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Error al obtener estudiante", http.StatusInternalServerError)
+		return
+	}
+	if existing.DNI != dni {
+		http.Error(w, "El DNI no coincide con el ingresante", http.StatusBadRequest)
+		return
+	}
+	if existing.Confirmed {
+		http.Error(w, "El banco ya fue confirmado", http.StatusConflict)
 		return
 	}
 
@@ -316,7 +380,7 @@ func (h *StudentHandler) ImportStudents(w http.ResponseWriter, r *http.Request) 
 
 		dni := strings.TrimSpace(row[0])
 		name := strings.TrimSpace(row[1])
-		instance := strings.TrimSpace(row[2])
+		instance := normalizeInstance(row[2])
 		title := strings.TrimSpace(row[3])
 
 		// Validar campos obligatorios
@@ -361,7 +425,7 @@ func (h *StudentHandler) ImportStudents(w http.ResponseWriter, r *http.Request) 
 		successCount++
 	}
 
-	// Los errores siempre travelan como lista, nunca null
+	// Los errores siempre viajan como lista, nunca null
 	if errorMessages == nil {
 		errorMessages = []string{}
 	}

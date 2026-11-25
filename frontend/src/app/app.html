@@ -1,5 +1,5 @@
 <div class="app" [class.app--admin]="isAdmin()">
-  <span class="sr-only" aria-live="polite">Página actual: A</span>
+  <span class="sr-only" aria-live="polite">Página actual: {{ currentPage() }}</span>
   
   <!-- Header Component / Navigation -->
   @if (!isAdmin()) {

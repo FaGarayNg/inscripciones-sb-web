@@ -1,4 +1,5 @@
-import { Component, OnInit, Input, computed, signal } from '@angular/core';
+import { Component, OnInit, Input, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { Student } from '../../../model/student';
 import { StudentService } from '../../../service/student.service';
@@ -43,6 +44,8 @@ export class StudentListComponent implements OnInit {
     return value.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   });
 
+  private readonly destroyRef = inject(DestroyRef);
+
   constructor(private studentService: StudentService) {}
 
   ngOnInit(): void {
@@ -51,7 +54,7 @@ export class StudentListComponent implements OnInit {
 
   loadStudents(): void {
     this.studentList$ = this.studentService.getStudents();
-    this.studentList$.subscribe((data) => {
+    this.studentList$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data) => {
       this.students.set(data.filter((item) => item.school === this.school));
     });
   }
@@ -162,7 +165,7 @@ export class StudentListComponent implements OnInit {
     this.submitting.set(true);
     this.confirmError.set('');
 
-    this.studentService.confirmStudent(student.id, email).subscribe({
+    this.studentService.confirmStudent(student.id, email, student.dni).subscribe({
       next: (updated) => {
         // Reemplazamos el alumno en el signal: la fila pasa a ✓ sola
         this.students.update((list) => list.map((item) => (item.id === updated.id ? updated : item)));

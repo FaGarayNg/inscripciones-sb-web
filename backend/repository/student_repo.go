@@ -167,7 +167,81 @@ func (r *StudentRepository) Delete(id primitive.ObjectID) error {
 	return nil
 }
 
-// GetCollection returns the MongoDB collection for advanced operations
-func (r *StudentRepository) GetCollection() *mongo.Collection {
-	return r.collection
+// FindByDNIAndEmail busca al alumno que se identifica en el flujo de grupos.
+// Solo se permite si ya confirmó su banco (fue él quien cargó el email).
+func (r *StudentRepository) FindByDNIAndEmail(dni, email string) (*models.Student, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var student models.Student
+	err := r.collection.FindOne(ctx, bson.M{
+		"dni":       dni,
+		"email":     email,
+		"confirmed": true,
+	}).Decode(&student)
+	if err != nil {
+		return nil, err
+	}
+	return &student, nil
+}
+
+// FindByIDs devuelve los alumnos de una lista de IDs. Se usa para armar las
+// vistas de grupo con nombres, sin exponer correos electrónicos.
+func (r *StudentRepository) FindByIDs(ids []primitive.ObjectID) (map[primitive.ObjectID]models.Student, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := make(map[primitive.ObjectID]models.Student, len(ids))
+	cursor, err := r.collection.Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var students []models.Student
+	if err := cursor.All(ctx, &students); err != nil {
+		return nil, err
+	}
+	for _, student := range students {
+		result[student.ID] = student
+	}
+	return result, nil
+}
+
+// SetGroupMembership asocia un alumno a un grupo y actualiza sus flags.
+func (r *StudentRepository) SetGroupMembership(id, groupID primitive.ObjectID, alone bool) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{
+		"groupID":  groupID.Hex(),
+		"hasGroup": true,
+		"alone":    alone,
+	}})
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// ClearGroup desasocia un alumno de su grupo (rechazo, borrado o expulsión).
+func (r *StudentRepository) ClearGroup(id primitive.ObjectID) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{
+		"groupID":  "",
+		"hasGroup": false,
+		"alone":    false,
+	}})
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }

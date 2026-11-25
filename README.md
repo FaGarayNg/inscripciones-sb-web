@@ -17,8 +17,8 @@ inscripciones-sb-web/
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── features/    # Componentes por funcionalidad
-│   │   │   ├── models/      # Modelos de datos
-│   │   │   ├── services/    # Servicios HTTP
+│   │   │   ├── model/       # Modelos de datos
+│   │   │   ├── service/     # Servicios HTTP
 │   │   │   └── shared/      # Componentes compartidos
 │   └── ...
 └── backend/           # API Go + MongoDB
@@ -34,7 +34,7 @@ inscripciones-sb-web/
 | Capa | Tecnología |
 |------|------------|
 | Frontend | Angular 22 |
-| Backend | Go 1.21+ |
+| Backend | Go 1.26+ |
 | Base de datos | MongoDB Atlas |
 
 ## Configuración
@@ -65,10 +65,14 @@ go run main.go
 | GET | `/api/students` | Listar estudiantes |
 | GET | `/api/students/{id}` | Obtener estudiante |
 | POST | `/api/students/{id}/confirm` | Confirmar banco (flujo del ingresante) |
-| GET | `/api/groups` | Listar grupos |
+| GET | `/api/groups` | Listar grupos (con nombres, sin correos) |
 | GET | `/api/groups/{id}` | Obtener grupo |
-| GET | `/api/invitations` | Listar invitaciones |
+| POST | `/api/groups/identify` | Identificarse con DNI + email (devuelve token de alumno) |
+| GET | `/api/settings` | Consultar si la formación de grupos está habilitada |
 | GET | `/api/abanderados` | Listar abanderados y escoltas titulares |
+
+Los listados públicos de alumnos y grupos **no incluyen correos electrónicos**: el email
+solo se expone en los endpoints `/api/admin` y se guarda cuando el ingresante confirma su banco.
 
 ### Protegidas (requieren `Authorization: Bearer <token>`)
 
@@ -79,15 +83,38 @@ go run main.go
 | PUT | `/api/admin/students/{id}` | Actualizar estudiante |
 | DELETE | `/api/admin/students/{id}` | Eliminar estudiante |
 | POST | `/api/admin/students/import` | Importar alumnos desde Excel |
+| GET | `/api/admin/students/export` | Descargar listado ordenado en `.xlsx` (Nombre, Email, Instancia, Titulo, Grupo) |
 | POST | `/api/admin/abanderados/import` | Importar la lista de abanderados desde Excel |
 | DELETE | `/api/admin/abanderados/{id}` | Quitar un abanderado de la lista |
-| POST | `/api/admin/groups` | Crear grupo |
-| PUT | `/api/admin/groups/{id}` | Actualizar grupo |
-| DELETE | `/api/admin/groups/{id}` | Eliminar grupo |
+| GET | `/api/admin/groups` | Listar grupos (dashboard) |
+| DELETE | `/api/admin/groups/{id}` | Eliminar grupo (cancela invitaciones y libera a sus integrantes) |
 | DELETE | `/api/admin/groups/{id}/members/{memberId}` | Quitar integrante |
 
-> Toda escritura requiere token de administrador. Solo la lectura de listados y la
-> confirmación de banco son públicas, porque las consulta la comunidad sin cuenta.
+> Toda escritura del panel requiere token de administrador. Solo la lectura de listados,
+> la identificación/creación de grupos y la confirmación de banco son públicas.
+> La confirmación pública pide el DNI además del ID del alumno y no se puede repetir.
+
+### Flujo de grupos (token de alumno)
+
+No hay login para ingresantes: en `/grupos` se identifican con su **DNI + el correo con el que
+confirmaron el banco**. El backend devuelve un JWT de alumno que se envía en la cabecera
+`X-Student-Token` (distinto del `Bearer` de administrador).
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/groups/me` | Mi grupo, invitaciones recibidas y enviadas |
+| POST | `/api/groups` | Crear grupo: `{solo: boolean, invitees: string[]}` (IDs de alumno) |
+| POST | `/api/groups/invitations/{id}/accept` | Aceptar invitación |
+| POST | `/api/groups/invitations/{id}/reject` | Rechazar invitación |
+| POST | `/api/groups/invitations/{id}/cancel` | Cancelar invitación pendiente (solo el líder) |
+
+Reglas: máximo **3 integrantes contando al líder**; se puede invitar a registrados confirmados
+sin grupo (hasta 2); en la web se busca al invitado **por nombre** y se envía su ID (así no hay
+ambigüedad entre alumnos con el mismo nombre); al aceptar se cancelan las demás invitaciones
+pendientes; entrar **en solitario es definitivo**. Todo depende de `groupsEnabled`: si está en `false`, `/grupos` solo
+muestra el aviso de "Próximamente", `identify` devuelve 403 y el frontend revalida el flag
+antes de cada acción (así reacciona aunque el admin lo cambie con la página abierta).
+No se envían correos: las invitaciones se ven dentro de `/grupos`.
 
 ### Plantillas de Excel
 
@@ -103,6 +130,15 @@ como archivos estáticos desde `frontend/public/`:
 
 En ambas, la fila 1 es el encabezado y se ignora; los datos empiezan en la fila 2.
 Los DNI repetidos se omiten y se informan en el resultado de la importación.
+Las instancias se normalizan al importar o guardar y se guardan como `Primera`,
+`Segunda`, `Tercera` o `Cuarta` (también se aceptan las formas largas, p. ej.
+`Primera instancia`).
+
+La exportación del panel genera `listado-alumnos.xlsx` con encabezados estilizados y
+filtro. El orden es: ingresantes con título CUD/Discapacidad (filas amarillas y en
+negrita), luego cada grupo por fecha de creación con su líder e integrantes, y por
+ último los alumnos sin grupo en orden alfabético. La columna Grupo indica
+`En solitario`, `Líder · Grupo de X` o `Integrante · Grupo de X`.
 
 ## Variables de entorno
 

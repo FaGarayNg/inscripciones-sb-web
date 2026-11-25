@@ -33,13 +33,13 @@ export class LoginComponent {
 
     this.authService.login({ username: this.username, password: this.password }).subscribe({
       next: () => {
-        console.log("Inició");
-        
         this.router.navigate(['/admin']);
       },
       error: (err) => {
         this.loading = false;
-        this.error = err.error?.message || 'Error al iniciar sesión';
+        // El backend responde texto plano con http.Error, no un JSON con message.
+        const detail = typeof err?.error === 'string' ? err.error.trim() : '';
+        this.error = detail || 'Error al iniciar sesión';
       }
     });
   }

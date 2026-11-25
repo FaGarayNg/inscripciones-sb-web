@@ -30,8 +30,6 @@ services:
     buildFilter:
       paths:
         - backend/**
-      ignoredPaths:
-        - backend/tmp_import_test/**
     envVars:
       - key: MONGODB_URI
         sync: false # URI de MongoDB Atlas

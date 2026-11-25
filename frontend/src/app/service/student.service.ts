@@ -15,14 +15,15 @@ export class StudentService {
     private apiUrl = inject(API_URL);
     private httpClient = inject(HttpClient);
 
-    // Obtener todos los alumnos (público: es la lista que consulta la comunidad)
+    // Obtener todos los alumnos (público: es la lista que consulta la comunidad).
+    // La API pública no expone el correo electrónico.
     getStudents(): Observable<Student[]> {
         return this.httpClient.get<Student[]>(`${this.apiUrl}/students`);
     }
 
-    // Obtener un alumno por ID (público)
-    getStudent(id: string): Observable<Student> {
-        return this.httpClient.get<Student>(`${this.apiUrl}/students/${id}`);
+    // Listado completo para el panel admin (requiere token; incluye email).
+    getAdminStudents(): Observable<Student[]> {
+        return this.httpClient.get<Student[]>(`${this.apiUrl}/admin/students`);
     }
 
     // Crear un nuevo alumno (requiere token de administrador)
@@ -35,9 +36,15 @@ export class StudentService {
         return this.httpClient.put<Student>(`${this.apiUrl}/admin/students/${id}`, student);
     }
 
-    // Confirmar el banco de un alumno (flujo público del ingresante)
-    confirmStudent(id: string, email: string): Observable<Student> {
-        return this.httpClient.post<Student>(`${this.apiUrl}/students/${id}/confirm`, { email });
+    // Confirmar el banco de un alumno (flujo público del ingresante).
+    // El DNI se envía como segunda verificación: el ID del alumno es público.
+    confirmStudent(id: string, email: string, dni: string): Observable<Student> {
+        return this.httpClient.post<Student>(`${this.apiUrl}/students/${id}/confirm`, { email, dni });
+    }
+
+    // Exportar el listado ordenado por grupos en un .xlsx (requiere token).
+    exportStudents(): Observable<Blob> {
+        return this.httpClient.get(`${this.apiUrl}/admin/students/export`, { responseType: 'blob' });
     }
 
     // Eliminar un alumno (requiere token de administrador)
@@ -53,11 +60,4 @@ export class StudentService {
         return this.httpClient.post<ImportResult>(`${this.apiUrl}/admin/students/import`, formData);
     }
 
-    // Guardar alumno (crear o actualizar)
-    saveStudent(student: Student): Observable<Student> {
-        if (student.id) {
-            return this.updateStudent(student.id, student);
-        }
-        return this.createStudent(student);
-    }
 }

@@ -1,5 +1,3 @@
-import { Invitations } from "./invitations";
-
 export class Student {
     id!: string;
     dni!: string;
@@ -11,5 +9,5 @@ export class Student {
     hasGroup!: boolean;
     alone!: boolean;
     confirmed!: boolean;
-    invitations?: Invitations[];
+    groupID?: string;
 }
