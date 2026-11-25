@@ -13,7 +13,7 @@ import (
 
 func main() {
 	godotenv.Load()
-	
+
 	// Conectar a MongoDB
 	if err := config.Connect(); err != nil {
 		log.Fatalf("Error conectando a MongoDB: %v", err)

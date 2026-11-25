@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"servidor-angular/config"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // LoginRequest representa la solicitud de login
@@ -72,12 +74,42 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Validar token
-		_, err := config.ValidateToken(tokenString)
-		if err != nil {
+		claims, err := config.ValidateToken(tokenString)
+		if err != nil || claims.Type != config.TokenTypeAdmin {
 			http.Error(w, "Token inválido o expirado", http.StatusUnauthorized)
 			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// StudentAuthMiddleware valida el token de identidad del ingresante. Va en la
+// cabecera X-Student-Token para no confundirse con el Bearer del administrador.
+func StudentAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenString := r.Header.Get("X-Student-Token")
+		if tokenString == "" {
+			http.Error(w, "Identificación requerida", http.StatusUnauthorized)
+			return
+		}
+
+		claims, err := config.ValidateToken(tokenString)
+		if err != nil || claims.Type != config.TokenTypeStudent || claims.StudentID == "" {
+			http.Error(w, "Identificación inválida o expirada", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// StudentIDFromRequest devuelve el ID del alumno autenticado (ya validado por
+// StudentAuthMiddleware).
+func StudentIDFromRequest(r *http.Request) (primitive.ObjectID, error) {
+	claims, err := config.ValidateToken(r.Header.Get("X-Student-Token"))
+	if err != nil {
+		return primitive.NilObjectID, err
+	}
+	return primitive.ObjectIDFromHex(claims.StudentID)
 }

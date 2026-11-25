@@ -1,4 +1,5 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { Abanderado } from '../../../model/abanderado';
 import { AbanderadoService } from '../../../service/abanderado.service';
@@ -17,13 +18,18 @@ export class AbanderadosListComponent implements OnInit {
   currentPage = signal(1);
   readonly itemsPerPage = 5;
 
+  private readonly destroyRef = inject(DestroyRef);
+
   constructor(private abanderadoService: AbanderadoService) {}
 
   ngOnInit(): void {
-    this.abanderadoService.getAbanderados().subscribe({
-      next: (data) => this.abanderados.set(data),
-      error: () => this.abanderados.set([]),
-    });
+    this.abanderadoService
+      .getAbanderados()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (data) => this.abanderados.set(data),
+        error: () => this.abanderados.set([]),
+      });
   }
 
   get totalPages(): number {

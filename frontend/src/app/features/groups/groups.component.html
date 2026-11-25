@@ -21,8 +21,8 @@
       <p>
         @if (groupsEnabled()) {
           Ya se encuentran disponibles los grupos. Recordá que podés crear tu grupo con
-          <strong>dos ingresantes</strong> o comenzar el ciclo lectivo <strong>en solitario</strong>.
-          Revisá tus invitaciones pendientes.
+          <strong>hasta dos ingresantes</strong> (tres con vos) o comenzar el ciclo lectivo
+          <strong>en solitario</strong>. Si te invitan, vas a ver la invitación acá mismo.
         } @else {
           Por el momento, la formación de grupos está <strong>cerrada</strong>. Asegurate de haber
           confirmado tu banco y esperá la notificación que enviaremos a tu
@@ -32,5 +32,391 @@
     </div>
   </div>
 
-  <!-- Grid de grupos: sólo visible con la etapa habilitada (pendiente) -->
+  @if (notice()) {
+    <div class="success-message">
+      <span class="success-message__icon"><app-icon name="check" [size]="20" /></span>
+      <div><strong>{{ notice() }}</strong></div>
+      <button class="icon-button" type="button" (click)="dismissNotice()" aria-label="Cerrar aviso">
+        <app-icon name="close" [size]="16" />
+      </button>
+    </div>
+  }
+
+  @if (error() && identified() && !showCreate()) {
+    <div class="group-error">{{ error() }}</div>
+  }
+
+  @if (groupsEnabled()) {
+    @if (!identified()) {
+      <div class="list-panel identity-panel">
+        <form class="confirm-form" (submit)="identify($event)">
+          <div class="form-heading">
+            <div>
+              <span class="step-number">1</span>
+              <h3>Verificá tu identidad</h3>
+            </div>
+          </div>
+          <p class="intro-copy">
+            Ingresá el DNI y el correo con el que confirmaste tu banco para ver tus invitaciones o
+            crear tu grupo.
+          </p>
+          <div class="verification-fields">
+            <label>
+              <span class="field-label">DNI</span>
+              <input
+                [value]="dni()"
+                (input)="dni.set($any($event.target).value)"
+                inputmode="numeric"
+                maxlength="8"
+                placeholder="Tu DNI"
+              />
+            </label>
+            <label>
+              <span class="field-label">Correo electrónico</span>
+              <input
+                type="email"
+                [value]="email()"
+                (input)="email.set($any($event.target).value)"
+                placeholder="nombre@correo.com"
+              />
+            </label>
+            <button type="submit" class="button button--primary" [disabled]="loading()">
+              {{ loading() ? 'Verificando...' : 'Verificar' }}
+            </button>
+          </div>
+          @if (error()) {
+            <small class="field-error">{{ error() }}</small>
+          }
+        </form>
+      </div>
+    } @else {
+      @if (myGroup(); as group) {
+        <div class="group-section">
+          <div class="section-heading-row">
+            <div>
+              <span class="eyebrow">Tu grupo</span>
+              <h2>{{ group.solo ? 'En solitario' : 'Grupo conformado' }}</h2>
+            </div>
+            <button class="text-link" type="button" (click)="changeIdentity()">Cambiar identidad</button>
+          </div>
+
+          <div class="group-grid">
+            <article class="group-card">
+              <div class="group-card__top">
+                <h3>{{ group.leader.name }}</h3>
+                @if (group.solo) {
+                  <span class="solo-tag">En solitario</span>
+                }
+              </div>
+
+              <div class="member-list">
+                <div class="member">
+                  <span>{{ group.leader.name.charAt(0) }}</span>
+                  <div><strong>{{ group.leader.name }}</strong><small>Líder</small></div>
+                </div>
+                @for (member of group.members; track member.id) {
+                  <div class="member">
+                    <span>{{ member.name.charAt(0) }}</span>
+                    <div><strong>{{ member.name }}</strong><small>Integrante</small></div>
+                  </div>
+                }
+                @if (!group.solo && group.members.length < 2) {
+                  <div class="member member--empty"><span>+</span><div><strong>Lugar libre</strong></div></div>
+                }
+              </div>
+
+              @if (group.solo) {
+                <p>
+                  Elegiste entrar <strong>en solitario</strong>. Esa decisión es definitiva: este
+                  grupo no admite invitaciones nuevas.
+                </p>
+              }
+            </article>
+          </div>
+
+          @if (sent().length > 0) {
+            <div class="group-section">
+              <div class="section-heading-row">
+                <div>
+                  <span class="eyebrow">Invitaciones enviadas</span>
+                  <h2>Esperando respuesta</h2>
+                </div>
+              </div>
+              <div class="group-grid">
+                @for (invitation of sent(); track invitation.id) {
+                  <article class="invitation-card">
+                    <div class="invitation-card__header">
+                      <span><app-icon name="mail" [size]="22" /></span>
+                      <div>
+                        <small>Invitación para</small>
+                        <h2>{{ invitation.studentName }}</h2>
+                      </div>
+                      <b [class.accepted]="invitation.status === 'ACCEPTED'">{{ statusLabel(invitation.status) }}</b>
+                    </div>
+                    @if (invitation.status === 'PENDING') {
+                      <div class="invitation-card__footer">
+                        <small>No respondió todavía</small>
+                        <div>
+                          <button
+                            class="button button--secondary"
+                            type="button"
+                            (click)="cancel(invitation)"
+                          >
+                            Cancelar invitación
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </article>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="list-panel">
+          <div class="confirm-cta">
+            <div>
+              <strong>¿Ya decidiste cómo querés empezar?</strong>
+              <span>Creá tu grupo invitando a otros ingresantes o entrá en solitario.</span>
+            </div>
+            <button type="button" (click)="openCreate()">
+              Crear mi grupo <app-icon name="arrow" [size]="18" />
+            </button>
+          </div>
+          @if (pending().length === 0) {
+            <div class="empty-state">
+              <span><app-icon name="mail" [size]="26" /></span>
+              <h2>No tenés invitaciones por ahora</h2>
+              <p>Cuando te inviten a un grupo, la invitación aparece acá para que la respondas.</p>
+            </div>
+          }
+        </div>
+
+        @for (invitation of pending(); track invitation.id) {
+          <div class="group-section">
+            <article class="invitation-card">
+              <div class="invitation-card__header">
+                <span>{{ invitation.leaderName.charAt(0) }}</span>
+                <div>
+                  <small>Te invitó {{ invitation.leaderName }}</small>
+                  <h2>Unirse al grupo</h2>
+                </div>
+                <b>Pendiente</b>
+              </div>
+              <p>
+                Si aceptás, te incorporás automáticamente al grupo y no hace falta que crees el
+                tuyo. Si rechazás, podés armar tu propio grupo o entrar en solitario.
+              </p>
+              <div class="invite-members">
+                <span class="you">Vos</span>
+                <span>{{ invitation.leaderName.charAt(0) }}</span>
+              </div>
+              <div class="invitation-card__footer">
+                <small><app-icon name="clock" [size]="14" /> Podés responder cuando quieras</small>
+                <div>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    (click)="reject(invitation)"
+                  >
+                    Rechazar
+                  </button>
+                  <button class="button button--primary" type="button" (click)="accept(invitation)">
+                    Aceptar invitación
+                  </button>
+                </div>
+              </div>
+            </article>
+          </div>
+        }
+      }
+    }
+  }
+
+  <!-- Listado público: se muestra siempre, esté o no habilitada la etapa -->
+  <div class="group-section">
+    <div class="section-heading-row">
+      <div>
+        <span class="eyebrow">Comunidad</span>
+        <h2>Grupos conformados</h2>
+      </div>
+      <span class="result-count">{{ allGroups().length }} grupos</span>
+    </div>
+
+    @if (allGroups().length === 0) {
+      <div class="empty-state">
+        <span><app-icon name="users" [size]="26" /></span>
+        <h2>Todavía no hay grupos cargados</h2>
+        <p>
+          Cuando los ingresantes conformen su grupo, van a aparecer acá. Volvé a consultar en otro
+          momento.
+        </p>
+      </div>
+    } @else {
+      <div class="group-grid">
+        @for (group of paginatedGroups(); track group.id) {
+          <article class="group-card">
+            <div class="group-card__top">
+              <h3>{{ group.leader.name }}</h3>
+              @if (group.solo) {
+                <span class="solo-tag">En solitario</span>
+              }
+            </div>
+            <div class="member-list">
+              <div class="member">
+                <span>{{ group.leader.name.charAt(0) }}</span>
+                <div><strong>{{ group.leader.name }}</strong><small>Líder</small></div>
+              </div>
+              @for (member of group.members; track member.id) {
+                <div class="member">
+                  <span>{{ member.name.charAt(0) }}</span>
+                  <div><strong>{{ member.name }}</strong><small>Integrante</small></div>
+                </div>
+              }
+            </div>
+          </article>
+        }
+      </div>
+      @if (totalGroupPages() > 1) {
+        <div class="pagination">
+          <span>Página {{ currentGroupPage() }} de {{ totalGroupPages() }}</span>
+          <button
+            type="button"
+            (click)="changeGroupPage(-1)"
+            [disabled]="currentGroupPage() === 1"
+            aria-label="Página anterior"
+          >
+            &lt;
+          </button>
+          <button
+            type="button"
+            (click)="changeGroupPage(1)"
+            [disabled]="currentGroupPage() >= totalGroupPages()"
+            aria-label="Página siguiente"
+          >
+            &gt;
+          </button>
+        </div>
+      }
+    }
+  </div>
+
+  <div class="group-section">
+    <div class="section-heading-row">
+      <div>
+        <span class="eyebrow">Paso a paso</span>
+        <h2>Guía para formar tu grupo</h2>
+      </div>
+    </div>
+    <div class="guide-list">
+      <article>
+        <span>1</span>
+        <div>
+          <h2>Verificá tu identidad</h2>
+          <p>Usá el DNI y el correo con el que confirmaste tu banco.</p>
+        </div>
+      </article>
+      <article>
+        <span>2</span>
+        <div>
+          <h2>Elegí cómo empezar</h2>
+          <p>Creá un grupo con hasta dos ingresantes o entrá en solitario. El solitario es definitivo.</p>
+        </div>
+      </article>
+      <article>
+        <span>3</span>
+        <div>
+          <h2>Respondé tus invitaciones</h2>
+          <p>Si te invitan, aceptá o rechazá desde esta misma página. Al aceptar se cancelan tus otras invitaciones pendientes.</p>
+        </div>
+      </article>
+    </div>
+    <div class="note-card">
+      <app-icon name="info" [size]="22" />
+      <p>Todo pasa dentro de la web: no vas a recibir correos con las invitaciones.</p>
+    </div>
+  </div>
 </main>
+
+@if (showCreate()) {
+  <div class="modal-backdrop">
+    <div class="modal create-group-modal" role="dialog" aria-modal="true" aria-labelledby="create-group-title">
+      <div class="create-group-header">
+        <span class="modal__group"><app-icon name="users" /></span>
+        <div>
+          <span class="eyebrow">Armá tu grupo</span>
+          <h2 id="create-group-title">Crear mi grupo</h2>
+        </div>
+        <button class="icon-button" type="button" (click)="closeCreate()" aria-label="Cerrar">
+          <app-icon name="close" />
+        </button>
+      </div>
+
+      <div class="create-group-form">
+        <div class="solo-switch-row">
+          <div>
+            <strong>Entrar en solitario</strong>
+            <small>Tu grupo será de una sola persona y no podrás invitar a nadie después.</small>
+          </div>
+          <button
+            class="switch"
+            type="button"
+            role="switch"
+            [attr.aria-checked]="solo()"
+            [class.on]="solo()"
+            (click)="solo.set(!solo())"
+          >
+            <span></span>
+          </button>
+        </div>
+
+        @if (!solo()) {
+          <div class="group-options">
+            <div class="invite-fields">
+              <span class="field-label">Buscar ingresante por nombre (hasta 2)</span>
+              <div class="invite-search">
+                <div class="search-field">
+                  <app-icon name="search" [size]="19" />
+                  <input
+                    [value]="inviteQuery()"
+                    (input)="inviteQuery.set($any($event.target).value)"
+                    [disabled]="inviteSearchDisabled()"
+                    maxlength="80"
+                    [placeholder]="inviteSearchDisabled() ? 'Ya elegiste 2 invitados' : 'Nombre del ingresante'"
+                  />
+                </div>
+                @if (!inviteSearchDisabled() && inviteMatches().length > 0) {
+                  <div class="search-results">
+                    @for (student of inviteMatches(); track student.id) {
+                      <button type="button" (click)="toggleInvitee(student)">
+                        <span>{{ student.name }}</span>
+                        <app-icon [name]="isInvitee(student) ? 'check' : 'plus'" [size]="17" />
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+              @for (student of invitees(); track student.id) {
+                <span class="valid-person">
+                  <app-icon name="check" [size]="15" /> {{ student.name }}
+                  <button class="icon-button" type="button" (click)="toggleInvitee(student)" aria-label="Quitar invitado">
+                    <app-icon name="close" [size]="14" />
+                  </button>
+                </span>
+              }
+            </div>
+          </div>
+        }
+
+        @if (error()) {
+          <small class="field-error">{{ error() }}</small>
+        }
+
+        <button class="button button--primary create-submit" type="button" [disabled]="loading()" (click)="createGroup()">
+          {{ loading() ? 'Creando...' : solo() ? 'Entrar en solitario' : 'Crear grupo e invitar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

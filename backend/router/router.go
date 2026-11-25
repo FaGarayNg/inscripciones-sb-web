@@ -18,7 +18,6 @@ func NewRouter() *mux.Router {
 	studentHandler := handlers.NewStudentHandler()
 	abanderadoHandler := handlers.NewAbanderadoHandler()
 	groupHandler := handlers.NewGroupHandler()
-	invitationHandler := handlers.NewInvitationHandler()
 	settingHandler := handlers.NewSettingHandler()
 
 	// Rutas públicas
@@ -33,14 +32,23 @@ func NewRouter() *mux.Router {
 	// Rutas de Abanderados: SOLO lectura es pública (la consulta la comunidad).
 	r.HandleFunc("/api/abanderados", abanderadoHandler.GetAllAbanderados).Methods("GET")
 
-	// Rutas de Groups: SOLO lectura es pública
+	// Identificación del ingresante: se registra antes que /{id} para que
+	// "identify" no sea tomado como un ID de grupo.
+	r.HandleFunc("/api/groups/identify", groupHandler.Identify).Methods("POST")
+
+	// Flujo del alumno: requiere el token de identidad (X-Student-Token).
+	// Va antes que /api/groups/{id} para que /me no se confunda con un ID.
+	student := r.PathPrefix("/api/groups").Subrouter()
+	student.Use(handlers.StudentAuthMiddleware)
+	student.HandleFunc("/me", groupHandler.GetMyGroups).Methods("GET")
+	student.HandleFunc("/invitations/{id}/accept", groupHandler.Accept).Methods("POST")
+	student.HandleFunc("/invitations/{id}/reject", groupHandler.Reject).Methods("POST")
+	student.HandleFunc("/invitations/{id}/cancel", groupHandler.CancelInvitation).Methods("POST")
+	r.Handle("/api/groups", handlers.StudentAuthMiddleware(http.HandlerFunc(groupHandler.Create))).Methods("POST")
+
+	// Solo la lectura de grupos es pública.
 	r.HandleFunc("/api/groups", groupHandler.GetAllGroups).Methods("GET")
 	r.HandleFunc("/api/groups/{id}", groupHandler.GetGroup).Methods("GET")
-
-	// Rutas de Invitations (públicas para el frontend)
-	r.HandleFunc("/api/invitations", invitationHandler.GetAllInvitations).Methods("GET")
-	r.HandleFunc("/api/invitations", invitationHandler.CreateInvitation).Methods("POST")
-	r.HandleFunc("/api/invitations/{groupId}", invitationHandler.UpdateInvitation).Methods("PUT")
 
 	// Rutas de Settings: SOLO lectura es pública.
 	// La habilitación de grupos se cambia bajo /api/admin (protegida con JWT).
@@ -50,19 +58,18 @@ func NewRouter() *mux.Router {
 	admin := r.PathPrefix("/api/admin").Subrouter()
 	admin.Use(handlers.AuthMiddleware)
 
-	admin.HandleFunc("/students", studentHandler.GetAllStudents).Methods("GET")
+	admin.HandleFunc("/students", studentHandler.GetAllStudentsAdmin).Methods("GET")
 	admin.HandleFunc("/students", studentHandler.CreateStudent).Methods("POST")
 	admin.HandleFunc("/students/{id}", studentHandler.UpdateStudent).Methods("PUT")
 	admin.HandleFunc("/students/{id}", studentHandler.DeleteStudent).Methods("DELETE")
 	admin.HandleFunc("/students/import", studentHandler.ImportStudents).Methods("POST")
+	admin.HandleFunc("/students/export", studentHandler.ExportStudents).Methods("GET")
 
 	admin.HandleFunc("/abanderados/import", abanderadoHandler.ImportAbanderados).Methods("POST")
 	admin.HandleFunc("/abanderados/{id}", abanderadoHandler.DeleteAbanderado).Methods("DELETE")
 
-	admin.HandleFunc("/groups", groupHandler.GetAllGroups).Methods("GET")
-	admin.HandleFunc("/groups", groupHandler.CreateGroup).Methods("POST")
-	admin.HandleFunc("/groups/{id}", groupHandler.UpdateGroup).Methods("PUT")
-	admin.HandleFunc("/groups/{id}", groupHandler.DeleteGroup).Methods("DELETE")
+	admin.HandleFunc("/groups", groupHandler.GetAllGroupsAdmin).Methods("GET")
+	admin.HandleFunc("/groups/{id}", groupHandler.DeleteAdminGroup).Methods("DELETE")
 	admin.HandleFunc("/groups/{id}/members/{memberId}", groupHandler.RemoveMember).Methods("DELETE")
 
 	admin.HandleFunc("/settings", settingHandler.UpdateSettings).Methods("PATCH")
@@ -142,7 +149,7 @@ func CorsMiddleware(next http.Handler) http.Handler {
 		}
 
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Student-Token")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
